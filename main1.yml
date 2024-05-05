@@ -1,34 +1,84 @@
 ---
-- name: Collect log files from the control node
-  hosts: control_node
+- name: Configure Firewall and Automate Security Updates
+  hosts: controlnode1:controlnode2
+  become: yes
+  vars:
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519
   tasks:
-    - name: Ensure rsync is installed
-      ansible.builtin.package:
-        name: rsync
+    - name: Update apt caches and upgrade packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+      register: apt_upgrade_output
+
+    - name: Show apt upgrade output
+      debug:
+        var: apt_upgrade_output
+
+    - name: Install UFW
+      apt:
+        name: ufw
         state: present
-      when: ansible_pkg_mgr == "apt" and ansible_facts.packages is defined
 
-    - name: Collect log file directory
-      ansible.builtin.file:
-        path: /casestudy/log/collectlog
-        state: directory
-        mode: '0755'
+    - name: Show UFW installation status
+      shell: ufw status
+      register: ufw_status
 
-    - name: Synchronize log files
-      ansible.builtin.synchronize:
-        src: /var/log/apt/history.log
-        dest: /casestudy/log/collectlog/history.log
-        mode: pull
-      register: sync_result
+    - name: Display UFW installation status
+      debug:
+        var: ufw_status.stdout
 
-    - name: Display log output
-      ansible.builtin.debug:
-        var: sync_result
+    - name: Enable SSH port in firewall
+      ufw:
+        rule: allow
+        port: ssh
 
-    - name: Display last 10 lines of the log
-      ansible.builtin.command: tail -n 10 /casestudy/log/collectlog/history.log
-      register: log_output
+    - name: Show firewall rules
+      shell: ufw status
+      register: firewall_status
 
-    - name: Display the log output
-      ansible.builtin.debug:
-        var: log_output.stdout_lines
+    - name: Display firewall rules
+      debug:
+        var: firewall_status.stdout
+
+    - name: Enable firewall
+      ufw:
+        state: enabled
+
+    - name: Show firewall status after enabling
+      shell: ufw status
+      register: firewall_enabled_status
+
+    - name: Display firewall status after enabling
+      debug:
+        var: firewall_enabled_status.stdout
+
+    - name: Install unattended-upgrades package
+      apt:
+        name: unattended-upgrades
+        state: present
+
+    - name: Show unattended-upgrades installation status
+      shell: dpkg -l unattended-upgrades
+      register: unattended_upgrades_status
+
+    - name: Display unattended-upgrades installation status
+      debug:
+        var: unattended_upgrades_status.stdout
+
+    - name: Configure unattended-upgrades
+      copy:
+        content: |
+          // Your unattended-upgrades configuration here
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        owner: root
+        group: root
+        mode: 0644
+      notify: Restart unattended-upgrades
+
+  handlers:
+    - name: Restart unattended-upgrades
+      systemd:
+        name: unattended-upgrades
+        state: restarted
+      become: yes
