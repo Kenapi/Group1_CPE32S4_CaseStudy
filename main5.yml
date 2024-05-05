@@ -1,49 +1,48 @@
 ---
-hosts: controlnode1:controlnode2
-become: yes
-vars:
-  ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+- name: Collect log files from the control node
+  become: yes
+  hosts: controlnode1:controlnode2
+  vars:
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+  tasks:
+    - name: Download rsync if not already installed
+      ansible.builtin.get_url:
+        url: http://download.samba.org/pub/rsync/rsync-3.2.3.tar.gz
+        dest: /tmp/rsync-3.2.3.tar.gz
+        mode: 0755
+      when: ansible_pkg_mgr == "apt" and ansible_facts.packages is defined and "rsync" not in ansible_facts.packages
 
-tasks:
-  - name: Download rsync if not already installed
-    ansible.builtin.get_url:
-      url: http://download.samba.org/pub/rsync/rsync-3.2.3.tar.gz
-      dest: /tmp/rsync-3.2.3.tar.gz
-      mode: 0755
-    when: ansible_pkg_mgr == "apt" and ansible_facts.packages is defined and "rsync" not in ansible_facts.packages
+    - name: Extract rsync
+      ansible.builtin.command: tar -xzf /tmp/rsync-3.2.3.tar.gz -C /usr/local/src
+      when: ansible_pkg_mgr == "apt" and ansible_facts.packages is defined and "rsync" not in ansible_facts.packages
 
-  - name: Extract rsync
-    ansible.builtin.command: tar -xzf /tmp/rsync-3.2.3.tar.gz -C /usr/local/src
-    when: ansible_pkg_mgr == "apt" and ansible_facts.packages is defined and "rsync" not in ansible_facts.packages
+    - name: Build rsync
+      ansible.builtin.command: /usr/local/src/rsync-3.2.3/configure && make && make install
+      when: ansible_pkg_mgr == "apt" and ansible_facts.packages is defined and "rsync" not in ansible_facts.packages
 
-  - name: Build rsync
-    ansible.builtin.command: /usr/local/src/rsync-3.2.3/configure && make && make install
-    when: ansible_pkg_mgr == "apt" and ansible_facts.packages is defined and "rsync" not in ansible_facts.packages
+    - name: Remove existing file
+      file:
+        path: /casestudy/log/collectlog
+        state: absent
 
-  - name: Remove existing file
-    file:
-      path: /casestudy/log/collectlog
-      state: absent
+    - name: Create collectlog directory on remote hosts
+      file:
+        path: /casestudy/log/collectlog
+        state: directory
+        mode: 0755
 
-  - name: Create collectlog directory on remote hosts
-    file:
-      path: /casestudy/log/collectlog
-      state: directory
-      mode: 0755
+    - name: Collect log file
+      synchronize:
+        src: /var/log/apt/history.log
+        dest: /casestudy/log/collectlog/history.log
+        checksum: yes
+        mode: push
+      register: history_log
 
-  - name: Collect log file
-    synchronize:
-      src: /var/log/apt/history.log
-      dest: /casestudy/log/collectlog/history.log
-      checksum: yes
-      mode: push
-    register: history_log
+    - name: View log
+      command: tail -n 10 /casestudy/log/collectlog/history.log
+      register: log_output
 
-  - name: View log
-    command: tail -n 10 /casestudy/log/collectlog/history.log
-    register: log_output
-
-  - name: Display the log output
-    debug:
-      var: log_output.stdout_lines
-
+    - name: Display the log output
+      debug:
+        var: log_output.stdout_lines
