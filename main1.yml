@@ -1,0 +1,34 @@
+---
+- name: Collect log files from the control node
+  hosts: control_node
+  tasks:
+    - name: Ensure rsync is installed
+      ansible.builtin.package:
+        name: rsync
+        state: present
+      when: ansible_pkg_mgr == "apt" and ansible_facts.packages is defined
+
+    - name: Collect log file directory
+      ansible.builtin.file:
+        path: /casestudy/log/collectlog
+        state: directory
+        mode: '0755'
+
+    - name: Synchronize log files
+      ansible.builtin.synchronize:
+        src: /var/log/apt/history.log
+        dest: /casestudy/log/collectlog/history.log
+        mode: pull
+      register: sync_result
+
+    - name: Display log output
+      ansible.builtin.debug:
+        var: sync_result
+
+    - name: Display last 10 lines of the log
+      ansible.builtin.command: tail -n 10 /casestudy/log/collectlog/history.log
+      register: log_output
+
+    - name: Display the log output
+      ansible.builtin.debug:
+        var: log_output.stdout_lines
