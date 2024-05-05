@@ -1,0 +1,79 @@
+---
+- name: Install Ansible on controlnode1 and controlnode2
+  hosts: controlnode1:controlnode2
+  become: yes
+  vars:
+	ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+  tasks:
+	- name: Install Ansible
+  	ansible.builtin.package:
+    	name: ansible
+    	state: present
+
+- name: Create casestudy directory
+  hosts: controlnode1:controlnode2
+  become: yes
+  tasks:
+	- name: Create casestudy directory
+  	ansible.builtin.file:
+    	path: "/casestudy"
+    	state: directory
+
+- name: Create file.txt on manage node
+  hosts: localhost
+  become: yes
+  tasks:
+	- name: Create file.txt with content
+  	ansible.builtin.copy:
+    	content: "This is a secret information"
+    	dest: "/casestudy/file.txt"
+
+- name: Encrypt file on managenode
+  hosts: localhost
+  become: yes
+  vars:
+	ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+  tasks:
+	- name: Encrypt file.txt using Ansible Vault
+  	ansible.builtin.command:
+    	cmd: "ansible-vault encrypt /casestudy/file.txt --output /casestudy/transfer/encrypted_file.txt --vault-password-file ~/.vault_key"
+
+- name: Transfer encrypted file to controlnode1
+  hosts: controlnode1
+  vars:
+	ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+  tasks:
+	- name: Transfer encrypted file to control node
+  	ansible.builtin.copy:
+    	src: "/casestudy/transfer/encrypted_file.txt"
+    	dest: "/casestudy/encrypted_file.txt"
+    	mode: "0600"
+  	delegate_to: 172.17.0.3
+
+	- name: Encrypt file.txt using Ansible Vault
+  	ansible.builtin.command:
+    	cmd: "ansible-vault encrypt /casestudy/encrypted_file.txt --output /casestudy/encrypted_file.txt --vault-password-file ~/.vault_key"
+
+	- name: Debug vault password file contents
+  	ansible.builtin.debug:
+    	msg: "Vault password file contents: {{ lookup('file', '~/.vault_key') }}"
+
+	- name: Decrypt file on control node 1
+  	ansible.builtin.command:
+    	cmd: "ansible-vault decrypt /casestudy/encrypted_file.txt --output /casestudy/file.txt --vault-password-file ~/.vault_key"
+
+- name: Transfer encrypted file to controlnode2
+  hosts: controlnode2
+  vars:
+	ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+  tasks:
+	- name: Transfer encrypted file to control node2
+  	ansible.builtin.copy:
+    	src: "/casestudy/transfer/encrypted_file.txt"
+    	dest: "/casestudy/encrypted_file.txt"
+    	mode: "0600"
+  	delegate_to: 172.17.0.4
+
+	- name: Encrypt file.txt using Ansible Vault
+  	ansible.builtin.command:
+    	cmd: "ansible-vault encrypt /casestudy/encrypted_file.txt --output /casestudy/encrypted_file.txt --vault-password-file ~/.vault_key"
