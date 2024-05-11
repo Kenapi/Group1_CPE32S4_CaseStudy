@@ -1,0 +1,84 @@
+---
+- name: Configure Firewall and Automate Security Updates
+  hosts: controlnode1:controlnode2
+  become: yes
+  vars:
+    ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+  tasks:
+    - name: Update apt caches and upgrade packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+      register: apt_upgrade_output
+
+    - name: Show apt upgrade output
+      debug:
+        var: apt_upgrade_output
+
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+
+    - name: Show UFW installation status
+      shell: ufw status
+      register: ufw_status
+
+    - name: Display UFW installation status
+      debug:
+        var: ufw_status.stdout
+
+    - name: Enable SSH port in firewall
+      ufw:
+        rule: allow
+        port: ssh
+
+    - name: Show firewall rules
+      shell: ufw status
+      register: firewall_status
+
+    - name: Display firewall rules
+      debug:
+        var: firewall_status.stdout
+
+    - name: Enable firewall
+      ufw:
+        state: enabled
+
+    - name: Show firewall status after enabling
+      shell: ufw status
+      register: firewall_enabled_status
+
+    - name: Display firewall status after enabling
+      debug:
+        var: firewall_enabled_status.stdout
+
+    - name: Install unattended-upgrades package
+      apt:
+        name: unattended-upgrades
+        state: present
+
+    - name: Show unattended-upgrades installation status
+      shell: dpkg -l unattended-upgrades
+      register: unattended_upgrades_status
+
+    - name: Display unattended-upgrades installation status
+      debug:
+        var: unattended_upgrades_status.stdout
+
+    - name: Configure unattended-upgrades
+      copy:
+        content: |
+          // Your unattended-upgrades configuration here
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        owner: root
+        group: root
+        mode: 0644
+      notify: Restart unattended-upgrades
+
+  handlers:
+    - name: Restart unattended-upgrades
+      systemd:
+        name: unattended-upgrades
+        state: restarted
+      become: yes
